@@ -1,5 +1,5 @@
 //HOW TO COMPILE: gcc -O3 -fopenmp sieve_omp.c -o ../bin/sieve_omp -lm
-//HOW TO RUN: OMP_NUM_THREADS=4 ./bin/sieve_omp 10000000 
+//HOW TO RUN: OMP_NUM_THREADS=4 ./bin/sieve_omp 10000000
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -12,6 +12,9 @@ int main(int argc, char *argv[]) {
     }
 
     long N = atol(argv[1]);
+
+    // Start full execution timing
+    double t0 = omp_get_wtime();
 
     // Alokujemy tablicę znaków (1 = potencjalnie pierwsza, 0 = złożona)
     char *is_prime = malloc((N + 1) * sizeof(char));
@@ -28,9 +31,6 @@ int main(int argc, char *argv[]) {
         is_prime[i] = 1;
     }
     is_prime[0] = is_prime[1] = 0;
-
-    // Start pomiaru czasu równoległego fragmentu
-    double t0 = omp_get_wtime();
 
     long limit = (long) sqrt(N);
 
@@ -56,9 +56,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Koniec pomiaru
-    double t1 = omp_get_wtime();
-
     // ****************************************************************************
     // 4) Liczymy, ile liczb pierwszych znalazło się w tablicy
     // ****************************************************************************
@@ -68,6 +65,9 @@ int main(int argc, char *argv[]) {
             count++;
         }
     }
+
+    // End full execution timing
+    double t1 = omp_get_wtime();
 
     // Wypisujemy czas i – na stderr – liczbę znalezionych pierwszych
     printf("%f\n", t1 - t0);

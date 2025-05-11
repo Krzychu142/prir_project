@@ -1,9 +1,5 @@
 //HOW TO COMPILE: mpicc -O3 -fopenmp src/sieve_hybrid.c -o bin/sieve_hybrid -lm
 //HOW TO RUN: OMP_NUM_THREADS=4 mpirun -np 4 bin/sieve_hybrid 10000000
-// src/sieve_hybrid_annotated.c
-// HOW TO COMPILE: mpicc -O3 -fopenmp src/sieve_hybrid_annotated.c -o bin/sieve_hybrid -lm
-// HOW TO RUN: OMP_NUM_THREADS=4 mpirun -np 4 bin/sieve_hybrid 10000000
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -67,12 +63,15 @@ int main(int argc, char *argv[]) {
     if (rank != 0) primes = malloc(small_count * sizeof(long));
     MPI_Bcast(primes, small_count, MPI_LONG, 0, MPI_COMM_WORLD);
 
+    // ================================================
+    // -------- ZSYNCHRONIZUJ WSZYSTKIE PROCESY I ROZPOCZNIJ POMIAR --------
+    MPI_Barrier(MPI_COMM_WORLD);
+    double t0 = MPI_Wtime();           // === MPI timer ===
+    // ================================================
+
     // ======== Prepare local is_prime array ========
     char *is_prime = malloc(local_size * sizeof(char));
     for (long i = 0; i < local_size; i++) is_prime[i] = 1;
-
-    MPI_Barrier(MPI_COMM_WORLD);          // Synchronize before timing
-    double t0 = MPI_Wtime();             // === MPI timer ===
 
     // ======== Hybrid: OpenMP parallel region ========
     #pragma omp parallel for schedule(dynamic)
@@ -84,9 +83,6 @@ int main(int argc, char *argv[]) {
             is_prime[m - low_value] = 0;   // marking composites
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);          // Synchronize after work
-    double t1 = MPI_Wtime();             // === MPI timer ===
-
     // ======== MPI: reduction of counts and times ========
     long local_count = 0;
     for (long i = 0; i < local_size; i++)
@@ -94,12 +90,19 @@ int main(int argc, char *argv[]) {
     long total_count = 0;
     MPI_Reduce(&local_count, &total_count, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    double local_time = t1 - t0, max_time;
+    double local_time = MPI_Wtime() - t0; // optional intermediate time
+    double max_time;
     MPI_Reduce(&local_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
+    // ================================================
+    // -------- ZSYNCHRONIZUJ WSZYSTKIE PROCESY I ZAKOŃCZ POMIAR --------
+    MPI_Barrier(MPI_COMM_WORLD);
+    double t1 = MPI_Wtime();           // === MPI timer ===
+    // ================================================
+
     if (rank == 0) {
-        printf("HYBRID: N=%ld procs=%d threads=%d time=%.6f s primes=%ld\n",
-               N, nprocs, omp_get_max_threads(), max_time, total_count);
+        printf("HYBRID: N=%ld procs=%d threads=%d full_time=%.6f s primes=%ld\n",
+               N, nprocs, omp_get_max_threads(), t1 - t0, total_count);
     }
 
     // cleanup

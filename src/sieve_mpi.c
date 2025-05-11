@@ -72,16 +72,16 @@ int main(int argc, char *argv[]) {
     if (rank != 0) primes = malloc(small_count * sizeof(long));
     MPI_Bcast(primes, small_count, MPI_LONG, 0, MPI_COMM_WORLD);
 
+    // -------- ZSYNCHRONIZUJ WSZYSTKIE PROCESY --------
+    MPI_Barrier(MPI_COMM_WORLD);
+    double t0 = MPI_Wtime();
+
     // ****************************************************************************
     // 3) Każdy proces alokuje swoją pod-tablicę znaków i inicjalizuje ją na 1
     // ****************************************************************************
     char *is_prime = malloc(local_size * sizeof(char));
     for (long i = 0; i < local_size; i++)
         is_prime[i] = 1;
-
-    // Synchronizacja i start pomiaru
-    MPI_Barrier(MPI_COMM_WORLD);
-    double t0 = MPI_Wtime();
 
     // ****************************************************************************
     // 4) Zrównoleglone wymazywanie: każdy proces pracuje na swoim przedziale
@@ -99,12 +99,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    double t1 = MPI_Wtime();
-
-    // ****************************************************************************
-    // 5) Każdy proces zlicza swoje “1” w is_prime[] i redukuje do root
-    // ****************************************************************************
     long local_count = 0;
     for (long i = 0; i < local_size; i++)
         if (is_prime[i]) local_count++;
@@ -112,14 +106,16 @@ int main(int argc, char *argv[]) {
     long total_count = 0;
     MPI_Reduce(&local_count, &total_count, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    // Redukcja czasu (bierzemy max, bo całkowity czas to wolniejszy proces)
-    double local_time = t1 - t0;
+    double local_time = MPI_Wtime() - t0;  // not used for output
     double max_time;
     MPI_Reduce(&local_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    double t1 = MPI_Wtime();
+
     if (rank == 0) {
-        printf("MPI: N=%ld procs=%d time=%.6f s primes=%ld\n",
-               N, nprocs, max_time, total_count);
+        printf("MPI: N=%ld procs=%d full_time=%.6f s primes=%ld\n",
+               N, nprocs, t1 - t0, total_count);
     }
 
     // Sprzątanie
